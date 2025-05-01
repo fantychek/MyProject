@@ -1,0 +1,33 @@
+name: PR Review Check
+
+on:
+  pull_request:
+    branches:
+      - develop
+
+jobs:
+  review_check:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Check for approved reviews
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "Отримання код-рев'ю..."
+          reviews=$(curl -s -H "Authorization: token $GITHUB_TOKEN" \
+            "https://api.github.com/repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/reviews")
+
+          echo "Рев'ю отримано: $reviews"
+
+          approved_count=$(echo "$reviews" | grep -c '"state": "APPROVED"')
+
+          if [ "$approved_count" -gt 0 ]; then
+            echo "✅ Pull request має схвалене код-рев'ю!"
+          else
+            echo "❌ Немає жодного схваленого код-рев'ю!"
+            exit 1
+          fi
