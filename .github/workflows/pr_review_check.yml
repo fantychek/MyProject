@@ -1,33 +1,45 @@
-name: PR Review Check
+name: CI Pipeline
 
 on:
   pull_request:
-    branches:
-      - develop
+    types: [opened, synchronize, reopened]
 
 jobs:
   review_check:
     runs-on: ubuntu-latest
+    steps:
+      - name: Check for approved reviews
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const prNumber = context.payload.pull_request.number;
+            const reviews = await github.pulls.listReviews({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: prNumber
+            });
 
+            const approvedReview = reviews.data.find(review => review.state === 'APPROVED');
+            if (!approvedReview) {
+              core.setFailed('No approved review found.');
+            } else {
+              console.log('Review approved by:', approvedReview.user.login);
+            }
+          
+      - name: Set success status if review is approved
+        if: success()
+        run: echo "Review has been approved, proceeding to next steps."
+
+  sonar_analysis:
+    runs-on: ubuntu-latest
+    needs: review_check
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v3
 
-      - name: Check for approved reviews
+      - name: SonarQube analysis
+        uses: sonarsource/sonarcloud-github-action@v1
+        with:
+          sonar-token: ${{ secrets.SONAR_TOKEN }}
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          echo "Отримання код-рев'ю..."
-          reviews=$(curl -s -H "Authorization: token $GITHUB_TOKEN" \
-            "https://api.github.com/repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/reviews")
-
-          echo "Рев'ю отримано: $reviews"
-
-          approved_count=$(echo "$reviews" | grep -c '"state": "APPROVED"')
-
-          if [ "$approved_count" -gt 0 ]; then
-            echo "✅ Pull request має схвалене код-рев'ю!"
-          else
-            echo "❌ Немає жодного схваленого код-рев'ю!"
-            exit 1
-          fi
+          SONARQUBE_URL: https://your-sonarqube-server.com
